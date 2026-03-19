@@ -76,6 +76,7 @@ var _squashing: bool = false
 var _wheel_front: CollisionShape2D = null
 var _wheel_rear:  CollisionShape2D = null
 var _wheel_angle: float = 0.0   # visual rotation accumulator (radians)
+var _slope: float = 0.0         # current terrain slope (positive = uphill)
 
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var bike_sprite: Sprite2D = $BikeSprite
@@ -193,6 +194,7 @@ func _process_riding(delta):
 	var h_front := _get_height_at_pos(front_pos)
 	var h_rear  := _get_height_at_pos(rear_pos)
 	var slope_val := (h_front - h_rear) / (WHEEL_OFFSET * 2.0)  # positive = uphill
+	_slope = slope_val
 	# Uphill: reduce speed; downhill: boost speed
 	if slope_val > 0.01:
 		var uphill_factor := clampf(slope_val * 4.0, 0.0, 0.6)  # up to 60% reduction
@@ -343,6 +345,11 @@ func _draw() -> void:
 	var side := fwd.rotated(PI * 0.5)
 	var lift := Vector2(0.0, -height * 3.0)   # match sprite elevation scale
 
+	# Pitch: slope tilts the bike so front is higher/lower than rear visually.
+	# _slope is height_change / distance — multiply by VIS_SCALE * wheel_spread
+	# to get pixel offset between front and rear draw positions.
+	var pitch_px := _slope * 3.0 * WHEEL_OFFSET  # visual pitch in pixels
+
 	# Shadow pulse on landing (reuse _squashing flag for scale hint)
 	if shadow:
 		var sh_alpha := 0.35 - clampf(height / 80.0, 0.0, 1.0) * 0.25
@@ -351,29 +358,29 @@ func _draw() -> void:
 
 	match state:
 		State.RIDING, State.MOUNTING, State.DISMOUNTING:
-			_draw_bike(fwd, side, lift, Color(0.55, 0.42, 0.22), Color(0.2, 0.2, 0.22))
-			_draw_rider_body(fwd * 3.0 + lift, Color(0.25, 0.55, 0.90))
+			_draw_bike(fwd, side, lift, Color(0.55, 0.42, 0.22), Color(0.2, 0.2, 0.22), pitch_px)
+			_draw_rider_body(fwd * 3.0 + lift + Vector2(0.0, -pitch_px * 0.3), Color(0.25, 0.55, 0.90))
 
 		State.JUMPING:
-			_draw_bike(fwd, side, lift, Color(0.70, 0.60, 0.18), Color(0.25, 0.25, 0.25))
+			_draw_bike(fwd, side, lift, Color(0.70, 0.60, 0.18), Color(0.25, 0.25, 0.25), 0.0)
 			_draw_rider_body(fwd * 3.0 + lift, Color(1.0, 0.85, 0.15))
 
 		State.DISMOUNTED:
-			# Trailing bike behind the runner
 			var bike_offset := fwd * -20.0 + lift
-			_draw_bike(fwd, side, bike_offset, Color(0.45, 0.45, 0.48), Color(0.2, 0.2, 0.22))
+			_draw_bike(fwd, side, bike_offset, Color(0.45, 0.45, 0.48), Color(0.2, 0.2, 0.22), 0.0)
 			_draw_runner(fwd, side, lift)
 
 		State.CRASHED:
 			var crash_fwd  := Vector2.RIGHT.rotated(heading + PI * 0.5)
 			var crash_side := crash_fwd.rotated(PI * 0.5)
-			_draw_bike(crash_fwd, crash_side, lift, Color(0.7, 0.2, 0.2), Color(0.3, 0.1, 0.1))
+			_draw_bike(crash_fwd, crash_side, lift, Color(0.7, 0.2, 0.2), Color(0.3, 0.1, 0.1), 0.0)
 			_draw_rider_body(side * 20.0 + lift, Color(1.0, 0.3, 0.3))
 
 func _draw_bike(fwd: Vector2, side: Vector2, offset: Vector2,
-		frame_col: Color, wheel_col: Color) -> void:
-	var rear  := -fwd * 14.0 + offset
-	var front :=  fwd * 14.0 + offset
+		frame_col: Color, wheel_col: Color, pitch: float = 0.0) -> void:
+	# Pitch offsets front up and rear down (negative y = higher on screen)
+	var rear  := -fwd * 14.0 + offset + Vector2(0.0, pitch * 0.5)
+	var front :=  fwd * 14.0 + offset + Vector2(0.0, -pitch * 0.5)
 	# Frame
 	draw_line(rear, front, frame_col, 3.5)
 	# Seat stay / top tube hint
