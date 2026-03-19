@@ -73,11 +73,17 @@ func _handle_key(event: InputEventKey) -> void:
 			if event.ctrl_pressed or event.meta_pressed:
 				_test_course()
 		KEY_BRACKETLEFT:
-			_adjust_width(-10.0)
+			if event.shift_pressed:
+				_adjust_height(-5.0)
+			else:
+				_adjust_width(-10.0)
 		KEY_BRACKETRIGHT:
-			_adjust_width(10.0)
-		KEY_E:
-			_cycle_elevation()
+			if event.shift_pressed:
+				_adjust_height(5.0)
+			else:
+				_adjust_width(10.0)
+		KEY_C:
+			_cycle_camber()
 
 func _handle_click(_event: InputEventMouseButton, pos: Vector2) -> void:
 	match current_tool:
@@ -298,18 +304,30 @@ func _adjust_width(delta_w: float) -> void:
 	course_builder.rebuild()
 	_update_status()
 
-func _cycle_elevation() -> void:
+func _adjust_height(delta_h: float) -> void:
 	if _selected_pt < 0 or _selected_pt >= course_data.track_points.size():
 		return
-	var e: int = course_data.track_elevations[_selected_pt]
-	# Cycle: 0 → 1 → -1 → 0
-	if e == 0:
-		e = 1
-	elif e == 1:
-		e = -1
-	else:
-		e = 0
-	course_data.track_elevations[_selected_pt] = e
+	var h: float = course_data.track_heights[_selected_pt] + delta_h
+	course_data.track_heights[_selected_pt] = clampf(h, 0.0, 120.0)
+	_push_undo()
+	course_builder.rebuild()
+	_update_status()
+
+func _cycle_camber() -> void:
+	if _selected_pt < 0 or _selected_pt >= course_data.track_points.size():
+		return
+	var c: float = course_data.track_cambers[_selected_pt]
+	# Cycle through: 0 → 0.3 → 0.5 → -0.5 → -0.3 → 0
+	var steps := [0.0, 0.3, 0.5, -0.5, -0.3]
+	var best_i := 0
+	var best_d := INF
+	for i in steps.size():
+		var d := absf(steps[i] - c)
+		if d < best_d:
+			best_d = d
+			best_i = i
+	var next_i := (best_i + 1) % steps.size()
+	course_data.track_cambers[_selected_pt] = steps[next_i]
 	_push_undo()
 	course_builder.rebuild()
 	_update_status()
@@ -370,21 +388,33 @@ func _draw_overlay() -> void:
 	for i in n:
 		overlay.draw_line(pts[i], pts[(i + 1) % n], Color(1.0, 1.0, 1.0, 0.4), 2.0)
 
-	# Draw point handles with elevation indicators
+	# Draw point handles with height and camber indicators
 	for i in n:
 		var p: Vector2 = pts[i]
 		var is_sel := (_selected_pt == i)
 		var col := Color.YELLOW if is_sel else Color.WHITE
 		overlay.draw_circle(p, 8.0, col)
-		# Elevation indicator
-		var elev: int = course_data.track_elevations[i] if i < course_data.track_elevations.size() else 0
+		# Height indicator
+		var h: float = course_data.track_heights[i] if i < course_data.track_heights.size() else 0.0
 		var label := str(i)
-		if elev > 0:
-			label += "^"   # uphill
-			overlay.draw_circle(p, 12.0, Color(0.8, 0.3, 0.2, 0.5))
-		elif elev < 0:
-			label += "v"   # downhill
-			overlay.draw_circle(p, 12.0, Color(0.2, 0.5, 0.8, 0.5))
+		if h > 0.5:
+			label += " h%.0f" % h
+			var intensity := clampf(h / 120.0, 0.0, 1.0)
+			overlay.draw_circle(p, 12.0, Color(0.8, 0.4, 0.1, 0.3 + intensity * 0.4))
+		# Camber indicator (tilt line)
+		var c: float = course_data.track_cambers[i] if i < course_data.track_cambers.size() else 0.0
+		if absf(c) > 0.01:
+			var prev_pt: Vector2 = pts[(i - 1 + n) % n]
+			var next_pt: Vector2 = pts[(i + 1) % n]
+			var dir: Vector2 = (next_pt - prev_pt).normalized()
+			var perp := Vector2(-dir.y, dir.x)
+			# Draw tilt line: angled based on camber value
+			var tilt_len := 18.0
+			var tilt_y := c * 10.0  # positive camber = banked (line tilts inward)
+			var tilt_col := Color(0.2, 0.8, 0.3, 0.6) if c > 0 else Color(0.9, 0.3, 0.2, 0.6)
+			overlay.draw_line(p + perp * tilt_len + Vector2(0, -tilt_y),
+				p - perp * tilt_len + Vector2(0, tilt_y), tilt_col, 2.5)
+			label += " c%.1f" % c
 		overlay.draw_string(ThemeDB.fallback_font, p + Vector2(10, -6), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 
 	# Draw mud/sand zone centers
@@ -422,13 +452,14 @@ func _update_status() -> void:
 	var info := "%d pts | %d mud | %d sand | %d barriers" % [pts, mud, sand, bp]
 	if _selected_pt >= 0 and _selected_pt < pts:
 		var w: float = course_data.track_widths[_selected_pt]
-		var e: int = course_data.track_elevations[_selected_pt]
-		var elev_name := "flat"
-		if e > 0:
-			elev_name = "uphill"
-		elif e < 0:
-			elev_name = "downhill"
-		info += "  |  pt %d: width=%.0f [/]  elev=%s [E]" % [_selected_pt, w, elev_name]
+		var h: float = course_data.track_heights[_selected_pt]
+		var c: float = course_data.track_cambers[_selected_pt]
+		var camber_str := "flat"
+		if c > 0.01:
+			camber_str = "banked %.1f" % c
+		elif c < -0.01:
+			camber_str = "off-camber %.1f" % c
+		info += "  |  pt %d: width=%.0f [/]  height=%.0f [Shift+[/]]  camber=%s [C]" % [_selected_pt, w, h, camber_str]
 	status_label.text = info
 
 # ── Button callbacks (connected from scene) ───────────────────────────────────

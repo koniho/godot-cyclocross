@@ -14,8 +14,11 @@ extends Resource
 # Per-point half-track width (default 80.0). Must stay in sync with track_points.size().
 @export var track_widths: PackedFloat32Array = PackedFloat32Array()
 
-# Per-point elevation modifier: -1 (downhill), 0 (flat), +1 (uphill). Same size as track_points.
-@export var track_elevations: PackedInt32Array = PackedInt32Array()
+# Per-point height in pixels (0-120 range, default 0.0). Same size as track_points.
+@export var track_heights: PackedFloat32Array = PackedFloat32Array()
+
+# Per-point camber (-1.0 to +1.0, 0.0 = flat, negative = off-camber, positive = banked).
+@export var track_cambers: PackedFloat32Array = PackedFloat32Array()
 
 # Terrain zones: [{center: Vector2, half: Vector2}]
 @export var mud_zones: Array = []
@@ -39,7 +42,8 @@ func to_dict() -> Dictionary:
 		"lap_count": lap_count,
 		"track_points": pts,
 		"track_widths": Array(track_widths),
-		"track_elevations": Array(track_elevations),
+		"track_heights": Array(track_heights),
+		"track_cambers": Array(track_cambers),
 		"mud_zones": _zones_to_array(mud_zones),
 		"sand_zones": _zones_to_array(sand_zones),
 		"barrier_pairs": barrier_pairs.duplicate(true),
@@ -59,21 +63,41 @@ static func from_dict(d: Dictionary) -> CourseData:
 		pts.append(Vector2(p[0], p[1]))
 	cd.track_points = pts
 
+	var n := pts.size()
+
 	var widths_raw: Array = d.get("track_widths", [])
-	if widths_raw.size() == pts.size():
+	if widths_raw.size() == n:
 		cd.track_widths = PackedFloat32Array(widths_raw)
 	else:
 		cd.track_widths = PackedFloat32Array()
-		cd.track_widths.resize(pts.size())
+		cd.track_widths.resize(n)
 		cd.track_widths.fill(80.0)
 
-	var elev_raw: Array = d.get("track_elevations", [])
-	if elev_raw.size() == pts.size():
-		cd.track_elevations = PackedInt32Array(elev_raw)
+	# New height system — with backward compat for old track_elevations
+	var heights_raw: Array = d.get("track_heights", [])
+	if heights_raw.size() == n:
+		cd.track_heights = PackedFloat32Array(heights_raw)
 	else:
-		cd.track_elevations = PackedInt32Array()
-		cd.track_elevations.resize(pts.size())
-		cd.track_elevations.fill(0)
+		# Try converting legacy track_elevations: -1→0, 0→0, 1→30
+		var elev_raw: Array = d.get("track_elevations", [])
+		cd.track_heights = PackedFloat32Array()
+		cd.track_heights.resize(n)
+		cd.track_heights.fill(0.0)
+		if elev_raw.size() == n:
+			for i in n:
+				var e: int = int(elev_raw[i])
+				if e == 1:
+					cd.track_heights[i] = 30.0
+				else:
+					cd.track_heights[i] = 0.0
+
+	var cambers_raw: Array = d.get("track_cambers", [])
+	if cambers_raw.size() == n:
+		cd.track_cambers = PackedFloat32Array(cambers_raw)
+	else:
+		cd.track_cambers = PackedFloat32Array()
+		cd.track_cambers.resize(n)
+		cd.track_cambers.fill(0.0)
 
 	cd.mud_zones = _array_to_zones(d.get("mud_zones", []))
 	cd.sand_zones = _array_to_zones(d.get("sand_zones", []))

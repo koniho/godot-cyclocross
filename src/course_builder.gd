@@ -30,6 +30,7 @@ const C_POLE := Color(0.18, 0.18, 0.20)
 
 const BRIDGE_VIS_SCALE  := 3.0
 const BRIDGE_HALF_WIDTH := 90.0
+const VIS_SCALE         := 3.0  # visual height multiplier for ground elevation
 
 @export var course_data: CourseData = null
 
@@ -43,7 +44,8 @@ var _tape_segments: Array = []
 # Cached from course_data for fast access
 var _track_pts: PackedVector2Array = PackedVector2Array()
 var _track_widths: PackedFloat32Array = PackedFloat32Array()
-var _track_elevations: PackedInt32Array = PackedInt32Array()
+var _track_heights: PackedFloat32Array = PackedFloat32Array()
+var _track_cambers: PackedFloat32Array = PackedFloat32Array()
 var _mud_zones: Array = []
 var _sand_zones: Array = []
 var _barrier_pairs: Array = []
@@ -69,17 +71,22 @@ func rebuild() -> void:
 
 func _apply_data() -> void:
 	_track_pts = course_data.track_points
-	# Ensure widths/elevations arrays match track_points size
 	var n := _track_pts.size()
+	# Ensure widths array matches track_points size
 	if course_data.track_widths.size() != n:
 		course_data.track_widths.resize(n)
 		for i in n:
 			if course_data.track_widths[i] <= 0.0:
 				course_data.track_widths[i] = HALF_TRACK
 	_track_widths = course_data.track_widths
-	if course_data.track_elevations.size() != n:
-		course_data.track_elevations.resize(n)
-	_track_elevations = course_data.track_elevations
+	# Ensure heights array matches
+	if course_data.track_heights.size() != n:
+		course_data.track_heights.resize(n)
+	_track_heights = course_data.track_heights
+	# Ensure cambers array matches
+	if course_data.track_cambers.size() != n:
+		course_data.track_cambers.resize(n)
+	_track_cambers = course_data.track_cambers
 	_mud_zones = course_data.mud_zones
 	_sand_zones = course_data.sand_zones
 	_barrier_pairs = course_data.barrier_pairs
@@ -116,22 +123,73 @@ func _compute_edges() -> void:
 
 # ── Visuals ───────────────────────────────────────────────────────────────────
 
+func _get_height_at_index(i: int) -> float:
+	if i < _track_heights.size():
+		return _track_heights[i]
+	return 0.0
+
+func _height_visual_offset(h: float) -> Vector2:
+	return Vector2(0.0, -h * VIS_SCALE)
+
 func _build_visuals() -> void:
 	var n := _outer.size()
 
-	# Build track as individual quad segments so each can be tinted by elevation
+	# Build track as individual quad segments with height offset and tinting
 	for i in n:
 		var j := (i + 1) % n
-		var elev: int = _track_elevations[i] if i < _track_elevations.size() else 0
+		var h_i := _get_height_at_index(i)
+		var h_j := _get_height_at_index(j)
+		var avg_h := (h_i + h_j) * 0.5
+
+		# Tint: higher = slightly lighter, lower = normal dirt
 		var col := C_DIRT
-		if elev > 0:
-			col = C_DIRT.darkened(0.2)   # uphill — darker
-		elif elev < 0:
-			col = C_DIRT.lightened(0.15)  # downhill — lighter
+		if avg_h > 1.0:
+			col = C_DIRT.lightened(clampf(avg_h / 120.0 * 0.3, 0.0, 0.3))
+		elif avg_h < -1.0:
+			col = C_DIRT.darkened(clampf(-avg_h / 120.0 * 0.2, 0.0, 0.2))
+
+		# Compute visual vertices with height offset
+		var off_i := _height_visual_offset(h_i)
+		var off_j := _height_visual_offset(h_j)
 		var quad := Polygon2D.new()
 		quad.color = col
-		quad.polygon = PackedVector2Array([_outer[i], _outer[j], _inner[j], _inner[i]])
+		quad.polygon = PackedVector2Array([
+			_outer[i] + off_i, _outer[j] + off_j,
+			_inner[j] + off_j, _inner[i] + off_i
+		])
 		add_child(quad)
+
+	# Elevation markers: chevrons for uphill, arrows for downhill
+	for i in n:
+		var j := (i + 1) % n
+		var h_i := _get_height_at_index(i)
+		var h_j := _get_height_at_index(j)
+		var slope := h_j - h_i
+		if absf(slope) < 2.0:
+			continue
+		var center := (_track_pts[i] + _track_pts[j]) * 0.5
+		var avg_h := (h_i + h_j) * 0.5
+		var vis_center := center + _height_visual_offset(avg_h)
+		var dir := (_track_pts[j] - _track_pts[i]).normalized()
+		var perp := Vector2(-dir.y, dir.x)
+		var marker := Line2D.new()
+		marker.width = 2.0
+		marker.z_index = 1
+		if slope > 0:
+			# Uphill chevron pointing in travel direction
+			marker.default_color = Color(1.0, 0.6, 0.2, 0.35)
+			var tip := vis_center + dir * 8.0
+			marker.add_point(vis_center - dir * 6.0 + perp * 12.0)
+			marker.add_point(tip)
+			marker.add_point(vis_center - dir * 6.0 - perp * 12.0)
+		else:
+			# Downhill arrow
+			marker.default_color = Color(0.3, 0.7, 1.0, 0.35)
+			var tip := vis_center + dir * 8.0
+			marker.add_point(vis_center + dir * 6.0 + perp * 12.0)
+			marker.add_point(tip)
+			marker.add_point(vis_center + dir * 6.0 - perp * 12.0)
+		add_child(marker)
 
 	var infield := Polygon2D.new()
 	infield.name = "Infield"
@@ -160,8 +218,10 @@ func _add_terrain_oval(center: Vector2, half: Vector2, col: Color) -> void:
 	add_child(poly)
 
 func _add_start_finish() -> void:
-	var a := _outer[0]
-	var b := _inner[0]
+	var h0 := _get_height_at_index(0)
+	var off := _height_visual_offset(h0)
+	var a := _outer[0] + off
+	var b := _inner[0] + off
 	var dir  := (b - a).normalized()
 	var perp := Vector2(-dir.y, dir.x) * 8.0
 	var black := true
@@ -309,6 +369,12 @@ func _build_bridge_visual() -> void:
 	var bridge_b: Vector2 = ep[1]
 	var bridge_height: float = ep[2]
 
+	# Ground heights at bridge start/end for combining
+	var si: int = _bridge.get("start_idx", 0)
+	var ei: int = _bridge.get("end_idx", 0)
+	var gh_start := _get_height_at_index(si)
+	var gh_end := _get_height_at_index(ei)
+
 	const N := 14
 	var dir: Vector2  = (bridge_b - bridge_a).normalized()
 	var perp: Vector2 = Vector2(-dir.y, dir.x)
@@ -319,8 +385,11 @@ func _build_bridge_visual() -> void:
 	for i in N:
 		var t    := float(i) / float(N - 1)
 		var gp   := bridge_a.lerp(bridge_b, t)
-		var lift := -sin(t * PI) * bridge_height * BRIDGE_VIS_SCALE
-		var ep2  := gp + Vector2(0.0, lift)
+		# Bridge arch on top of interpolated ground height
+		var ground_h := lerpf(gh_start, gh_end, t)
+		var arch_h := sin(t * PI) * bridge_height
+		var total_lift := -(ground_h + arch_h) * BRIDGE_VIS_SCALE
+		var ep2  := gp + Vector2(0.0, total_lift)
 		deck_left.append(ep2  + perp * HALF_TRACK * 0.92)
 		deck_right.append(ep2 - perp * HALF_TRACK * 0.92)
 
@@ -337,8 +406,10 @@ func _build_bridge_visual() -> void:
 
 	for t: float in [0.15, 0.35, 0.50, 0.65, 0.85]:
 		var gp   := bridge_a.lerp(bridge_b, t)
-		var lift := -sin(t * PI) * bridge_height * BRIDGE_VIS_SCALE
-		var ep2  := gp + Vector2(0.0, lift)
+		var ground_h := lerpf(gh_start, gh_end, t)
+		var arch_h := sin(t * PI) * bridge_height
+		var total_lift := -(ground_h + arch_h) * BRIDGE_VIS_SCALE
+		var ep2  := gp + Vector2(0.0, total_lift)
 		for sx: float in [-0.5, 0.5]:
 			var top := ep2 + perp * (HALF_TRACK * sx)
 			var bot := gp  + perp * (HALF_TRACK * sx)
@@ -481,14 +552,83 @@ func get_terrain_at(pos: Vector2) -> int:
 func get_track_points() -> PackedVector2Array:
 	return PackedVector2Array(_track_pts)
 
+## Returns the combined ground height + bridge arch height at the given global position.
+## Ground height is interpolated from per-point track_heights.
+## Bridge arch is added on top if the position is within the bridge zone.
 func get_height_at(pos: Vector2) -> float:
+	var lp := to_local(pos)
+	var ground_h := get_ground_height_at(lp)
+
+	# Add bridge arch on top
 	var ep := _get_bridge_endpoints()
-	if ep.size() == 0:
+	if ep.size() > 0:
+		var t: float = _bridge_t(lp)
+		if t >= 0.0:
+			ground_h += sin(t * PI) * ep[2]
+
+	return ground_h
+
+## Returns interpolated ground height at a position in LOCAL course space.
+## Finds the nearest track segment and interpolates the height along it.
+func get_ground_height_at(pos: Vector2) -> float:
+	var n := _track_pts.size()
+	if n < 2:
 		return 0.0
-	var t: float = _bridge_t(to_local(pos))
-	if t < 0.0:
+
+	var best_d := INF
+	var best_i := 0
+	var best_t := 0.0
+
+	for i in n:
+		var j := (i + 1) % n
+		var a: Vector2 = _track_pts[i]
+		var b: Vector2 = _track_pts[j]
+		var seg: Vector2 = b - a
+		var len_sq := seg.length_squared()
+		var t := 0.0
+		if len_sq > 0.001:
+			t = clampf((pos - a).dot(seg) / len_sq, 0.0, 1.0)
+		var closest := a + seg * t
+		var d := pos.distance_to(closest)
+		if d < best_d:
+			best_d = d
+			best_i = i
+			best_t = t
+
+	var h_i := _get_height_at_index(best_i)
+	var h_j := _get_height_at_index((best_i + 1) % n)
+	return lerpf(h_i, h_j, best_t)
+
+## Returns interpolated camber at a position in GLOBAL space.
+func get_camber_at(pos: Vector2) -> float:
+	var lp := to_local(pos)
+	var n := _track_pts.size()
+	if n < 2:
 		return 0.0
-	return sin(t * PI) * ep[2]
+
+	var best_d := INF
+	var best_i := 0
+	var best_t := 0.0
+
+	for i in n:
+		var j := (i + 1) % n
+		var a: Vector2 = _track_pts[i]
+		var b: Vector2 = _track_pts[j]
+		var seg: Vector2 = b - a
+		var len_sq := seg.length_squared()
+		var t := 0.0
+		if len_sq > 0.001:
+			t = clampf((lp - a).dot(seg) / len_sq, 0.0, 1.0)
+		var closest := a + seg * t
+		var d := lp.distance_to(closest)
+		if d < best_d:
+			best_d = d
+			best_i = i
+			best_t = t
+
+	var c_i: float = _track_cambers[best_i] if best_i < _track_cambers.size() else 0.0
+	var c_j: float = _track_cambers[(best_i + 1) % n] if (best_i + 1) % n < _track_cambers.size() else 0.0
+	return lerpf(c_i, c_j, best_t)
 
 func get_layer_at(pos: Vector2) -> int:
 	var ep := _get_bridge_endpoints()
@@ -497,23 +637,6 @@ func get_layer_at(pos: Vector2) -> int:
 	var t: float = _bridge_t(to_local(pos))
 	if t >= 0.0 and sin(t * PI) * ep[2] > ep[2] * 0.3:
 		return 1
-	return 0
-
-func get_elevation_at(pos: Vector2) -> int:
-	# Find nearest track segment and return its elevation modifier
-	var lp := to_local(pos)
-	var n := _track_pts.size()
-	if n < 2:
-		return 0
-	var best_d := INF
-	var best_i := 0
-	for i in n:
-		var d := lp.distance_to(_track_pts[i])
-		if d < best_d:
-			best_d = d
-			best_i = i
-	if best_i < _track_elevations.size():
-		return _track_elevations[best_i]
 	return 0
 
 func is_on_course(pos: Vector2) -> bool:
@@ -545,13 +668,38 @@ func _make_default_data() -> CourseData:
 	cd.track_widths = PackedFloat32Array()
 	cd.track_widths.resize(n)
 	cd.track_widths.fill(80.0)
-	cd.track_elevations = PackedInt32Array()
-	cd.track_elevations.resize(n)
-	cd.track_elevations.fill(0)
-	# Bridge section is uphill then downhill
-	cd.track_elevations[3] = 1   # bridge ramp up
-	cd.track_elevations[4] = 1
-	cd.track_elevations[5] = -1  # bridge ramp down
+
+	# Height map (0-120 px)
+	cd.track_heights = PackedFloat32Array()
+	cd.track_heights.resize(n)
+	cd.track_heights.fill(0.0)
+	# Bridge approach points — bridge arch handles their visual elevation
+	cd.track_heights[3] = 0.0
+	cd.track_heights[4] = 0.0
+	cd.track_heights[5] = 0.0
+	# Gentle hill at upper right (pts 9-10)
+	cd.track_heights[9] = 25.0
+	cd.track_heights[10] = 25.0
+	# Gentle rise on far-left descent (pts 17-19)
+	cd.track_heights[17] = 15.0
+	cd.track_heights[18] = 15.0
+	cd.track_heights[19] = 15.0
+
+	# Camber map (-1.0 to +1.0)
+	cd.track_cambers = PackedFloat32Array()
+	cd.track_cambers.resize(n)
+	cd.track_cambers.fill(0.0)
+	# Far-left hairpin: off-camber
+	cd.track_cambers[21] = -0.3
+	cd.track_cambers[22] = -0.3
+	cd.track_cambers[23] = -0.3
+	# U-hairpin: on-camber (banked)
+	cd.track_cambers[25] = 0.2
+	cd.track_cambers[26] = 0.2
+	cd.track_cambers[27] = 0.2
+	cd.track_cambers[28] = 0.2
+	cd.track_cambers[29] = 0.2
+
 	cd.mud_zones = [
 		{"center": Vector2(1120, 95), "half": Vector2(68, 34)},
 		{"center": Vector2(920, 90),  "half": Vector2(68, 34)},

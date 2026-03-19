@@ -186,14 +186,29 @@ func _process_riding(delta):
 	var terrain_max: float = max_speed * terrain_props.max_speed_mult
 	var terrain_decel: float = terrain_props.get("deceleration", 30.0)
 
-	# Elevation effect: uphill slows, downhill boosts
-	var elev: int = _get_elevation()
-	if elev > 0:
-		terrain_max *= 0.75
-		accel_mult *= 0.6
-	elif elev < 0:
-		terrain_max *= 1.15
-		terrain_decel *= 0.3  # coasts longer downhill
+	# Slope-based speed: compute height difference between front and rear wheel
+	var fwd_slope := Vector2.RIGHT.rotated(heading)
+	var front_pos := global_position + fwd_slope * WHEEL_OFFSET
+	var rear_pos  := global_position - fwd_slope * WHEEL_OFFSET
+	var h_front := _get_height_at_pos(front_pos)
+	var h_rear  := _get_height_at_pos(rear_pos)
+	var slope_val := (h_front - h_rear) / (WHEEL_OFFSET * 2.0)  # positive = uphill
+	# Uphill: reduce speed; downhill: boost speed
+	if slope_val > 0.01:
+		var uphill_factor := clampf(slope_val * 4.0, 0.0, 0.6)  # up to 60% reduction
+		terrain_max *= (1.0 - uphill_factor)
+		accel_mult *= (1.0 - uphill_factor * 0.8)
+	elif slope_val < -0.01:
+		var downhill_factor := clampf(-slope_val * 3.0, 0.0, 0.4)  # up to 40% boost
+		terrain_max *= (1.0 + downhill_factor)
+		terrain_decel *= (1.0 - downhill_factor * 0.7)  # coasts longer downhill
+
+	# Camber-based grip: off-camber reduces grip, on-camber increases it
+	var camber := _get_camber()
+	if camber < 0.0:
+		grip *= (1.0 + camber * 0.3)  # off-camber: up to 30% grip reduction at -1.0
+	elif camber > 0.0:
+		grip *= (1.0 + camber * 0.15)  # on-camber: up to 15% grip increase at +1.0
 
 	if is_braking:
 		# Ramp from light to hard braking the longer the key is held
@@ -517,7 +532,12 @@ func _get_terrain_layer() -> int:
 		return course.get_layer_at(global_position)
 	return 0
 
-func _get_elevation() -> int:
-	if course and course.has_method("get_elevation_at"):
-		return course.get_elevation_at(global_position)
-	return 0
+func _get_height_at_pos(pos: Vector2) -> float:
+	if course and course.has_method("get_height_at"):
+		return course.get_height_at(pos)
+	return 0.0
+
+func _get_camber() -> float:
+	if course and course.has_method("get_camber_at"):
+		return course.get_camber_at(global_position)
+	return 0.0
