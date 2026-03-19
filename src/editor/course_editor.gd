@@ -354,8 +354,8 @@ func _undo() -> void:
 
 func _save_course() -> void:
 	DirAccess.make_dir_recursive_absolute("user://courses")
-	var filename := course_data.id if course_data.id != "" else "untitled"
-	var path := "user://courses/%s.json" % filename
+	# Always save as default.json so it auto-loads in the test arena
+	var path := "user://courses/default.json"
 	course_data.save_json(path)
 	status_label.text = "Saved: %s" % path
 

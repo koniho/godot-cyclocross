@@ -32,10 +32,15 @@ func _ready():
 
 	course = get_tree().get_first_node_in_group("course")
 
-	# Apply editor course data if testing from the editor
+	# Load course: editor data first, then saved default, then built-in fallback
 	if GameManager.editor_course_data and course and course.has_method("rebuild"):
 		course.course_data = GameManager.editor_course_data
 		course.rebuild()
+	elif course and course.has_method("rebuild"):
+		var saved := CourseData.load_json("user://courses/default.json")
+		if saved:
+			course.course_data = saved
+			course.rebuild()
 
 	if course:
 		course.lap_crossed.connect(_on_lap_crossed)
