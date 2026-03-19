@@ -239,28 +239,45 @@ func _add_start_finish() -> void:
 # ── Course tape ───────────────────────────────────────────────────────────────
 
 func _build_course_tape() -> void:
-	_add_tape_boundary(_outer)
-	_add_tape_boundary(_inner)
-
-func _add_tape_boundary(edge_pts: PackedVector2Array) -> void:
-	var n := edge_pts.size()
-	var pole_pos: PackedVector2Array = PackedVector2Array()
+	var n := _outer.size()
+	# Compute height-offset visual edges for tape/poles
+	var vis_outer := PackedVector2Array()
+	var vis_inner := PackedVector2Array()
+	vis_outer.resize(n)
+	vis_inner.resize(n)
 	for i in n:
-		var a: Vector2 = edge_pts[i]
-		var b: Vector2 = edge_pts[(i + 1) % n]
-		var seg_len := a.distance_to(b)
+		var off := _height_visual_offset(_get_height_at_index(i))
+		vis_outer[i] = _outer[i] + off
+		vis_inner[i] = _inner[i] + off
+	_add_tape_boundary(vis_outer, _outer)
+	_add_tape_boundary(vis_inner, _inner)
+
+func _add_tape_boundary(vis_pts: PackedVector2Array, ground_pts: PackedVector2Array) -> void:
+	var n := vis_pts.size()
+	# Sample pole positions along VISUAL edges (for drawing)
+	var pole_vis: PackedVector2Array = PackedVector2Array()
+	# Matching ground-level positions (for collision Area2D)
+	var pole_ground: PackedVector2Array = PackedVector2Array()
+	for i in n:
+		var va: Vector2 = vis_pts[i]
+		var vb: Vector2 = vis_pts[(i + 1) % n]
+		var ga: Vector2 = ground_pts[i]
+		var gb: Vector2 = ground_pts[(i + 1) % n]
+		var seg_len := ga.distance_to(gb)
 		var traveled := 0.0
 		while traveled < seg_len - 0.1:
-			pole_pos.append(a.lerp(b, traveled / seg_len))
+			var t := traveled / seg_len
+			pole_vis.append(va.lerp(vb, t))
+			pole_ground.append(ga.lerp(gb, t))
 			traveled += TAPE_POLE_SPACING
 
-	var m := pole_pos.size()
+	var m := pole_vis.size()
 	if m < 2:
 		return
 
 	var pole_nodes: Array = []
 	for i in m:
-		var base: Vector2 = pole_pos[i]
+		var base: Vector2 = pole_vis[i]
 		var pole := Line2D.new()
 		pole.width         = TAPE_POLE_WIDTH
 		pole.default_color = C_POLE
@@ -271,8 +288,9 @@ func _add_tape_boundary(edge_pts: PackedVector2Array) -> void:
 		pole_nodes.append(pole)
 
 	for i in m:
-		var pa: Vector2 = pole_pos[i]
-		var pb: Vector2 = pole_pos[(i + 1) % m]
+		# Visual tape at height-offset positions
+		var pa: Vector2 = pole_vis[i]
+		var pb: Vector2 = pole_vis[(i + 1) % m]
 		var top_a := pa + Vector2(0.0, -TAPE_POLE_HEIGHT)
 		var top_b := pb + Vector2(0.0, -TAPE_POLE_HEIGHT)
 		var mid   := (top_a + top_b) * 0.5
@@ -286,9 +304,12 @@ func _add_tape_boundary(edge_pts: PackedVector2Array) -> void:
 		tape.z_index = 2
 		add_child(tape)
 
-		var seg_center := (pa + pb) * 0.5
-		var seg_dir: Vector2 = (pb - pa).normalized()
-		var seg_len  := pa.distance_to(pb)
+		# Collision Area2D stays at ground level
+		var ga: Vector2 = pole_ground[i]
+		var gb: Vector2 = pole_ground[(i + 1) % m]
+		var seg_center := (ga + gb) * 0.5
+		var seg_dir: Vector2 = (gb - ga).normalized()
+		var seg_len  := ga.distance_to(gb)
 
 		var area := Area2D.new()
 		area.collision_layer = 0
@@ -302,10 +323,11 @@ func _add_tape_boundary(edge_pts: PackedVector2Array) -> void:
 		col.shape = rect
 		area.add_child(col)
 
+		# Visual collision strip at height-offset position (matches tape visually)
 		var strip := Line2D.new()
 		strip.width         = 3.0
 		strip.default_color = Color(1.0, 1.0, 0.35, 0.45)
-		strip.add_point(pa)
+		strip.add_point(pa)   # pa/pb are already height-offset (from vis_pts)
 		strip.add_point(pb)
 		strip.z_index = 1
 		add_child(strip)
