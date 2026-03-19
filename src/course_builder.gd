@@ -153,6 +153,7 @@ func _build_visuals() -> void:
 		var off_j := _height_visual_offset(h_j)
 		var quad := Polygon2D.new()
 		quad.color = col
+		quad.z_index = -4000
 		quad.polygon = PackedVector2Array([
 			_outer[i] + off_i, _outer[j] + off_j,
 			_inner[j] + off_j, _inner[i] + off_i
@@ -174,7 +175,7 @@ func _build_visuals() -> void:
 		var perp := Vector2(-dir.y, dir.x)
 		var marker := Line2D.new()
 		marker.width = 2.0
-		marker.z_index = 1
+		marker.z_index = -3998
 		if slope > 0:
 			# Uphill chevron pointing in travel direction
 			marker.default_color = Color(1.0, 0.6, 0.2, 0.35)
@@ -194,6 +195,7 @@ func _build_visuals() -> void:
 	var infield := Polygon2D.new()
 	infield.name = "Infield"
 	infield.color = C_INFIELD
+	infield.z_index = -4000
 	infield.polygon = _inner
 	add_child(infield)
 
@@ -214,6 +216,7 @@ func _add_terrain_oval(center: Vector2, half: Vector2, col: Color) -> void:
 		pts.append(center + Vector2(cos(a) * half.x, sin(a) * half.y))
 	var poly := Polygon2D.new()
 	poly.color = col
+	poly.z_index = -3999
 	poly.polygon = pts
 	add_child(poly)
 
@@ -232,6 +235,7 @@ func _add_start_finish() -> void:
 		var pb := a.lerp(b, t1)
 		var poly := Polygon2D.new()
 		poly.color = Color.BLACK if black else Color.WHITE
+		poly.z_index = -3998
 		poly.polygon = PackedVector2Array([pa - perp, pa + perp, pb + perp, pb - perp])
 		add_child(poly)
 		black = not black

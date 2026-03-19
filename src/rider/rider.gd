@@ -350,11 +350,26 @@ func _draw() -> void:
 	# to get pixel offset between front and rear draw positions.
 	var pitch_px := _slope * 3.0 * WHEEL_OFFSET  # visual pitch in pixels
 
-	# Shadow pulse on landing (reuse _squashing flag for scale hint)
+	# Hide placeholder shadow sprite — we draw our own
 	if shadow:
-		var sh_alpha := 0.35 - clampf(height / 80.0, 0.0, 1.0) * 0.25
-		shadow.modulate = Color(0.0, 0.0, 0.0, sh_alpha)
-		shadow.scale    = Vector2(2.0 + height / 40.0, 0.5)
+		shadow.visible = false
+
+	# Draw shadow at ground level (no lift), oriented along heading with pitch skew
+	var sh_alpha := 0.3 - clampf(height / 80.0, 0.0, 1.0) * 0.2
+	if sh_alpha > 0.01:
+		var sh_col := Color(0.0, 0.0, 0.0, sh_alpha)
+		var sh_spread := 1.0 + height / 40.0   # shadow grows when airborne
+		var sh_rear  := -fwd * 14.0 * sh_spread + Vector2(0.0, pitch_px * 0.3)
+		var sh_front :=  fwd * 14.0 * sh_spread + Vector2(0.0, -pitch_px * 0.3)
+		var sh_side  := side * 5.0 * sh_spread
+		# Flattened ellipse-like quad on the ground
+		draw_polygon(
+			PackedVector2Array([
+				sh_front + sh_side, sh_front - sh_side,
+				sh_rear - sh_side, sh_rear + sh_side
+			]),
+			PackedColorArray([sh_col, sh_col, sh_col, sh_col])
+		)
 
 	match state:
 		State.RIDING, State.MOUNTING, State.DISMOUNTING:
