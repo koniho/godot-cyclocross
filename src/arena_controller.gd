@@ -31,6 +31,12 @@ func _ready():
 		stamina_bar.max_value = player.max_stamina
 
 	course = get_tree().get_first_node_in_group("course")
+
+	# Apply editor course data if testing from the editor
+	if GameManager.editor_course_data and course and course.has_method("rebuild"):
+		course.course_data = GameManager.editor_course_data
+		course.rebuild()
+
 	if course:
 		course.lap_crossed.connect(_on_lap_crossed)
 

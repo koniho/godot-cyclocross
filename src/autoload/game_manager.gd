@@ -17,7 +17,8 @@ enum GameState {
 	RACING,
 	RACE_PAUSED,
 	RACE_RESULTS,
-	SETTINGS
+	SETTINGS,
+	EDITOR
 }
 
 var state: GameState = GameState.TITLE
@@ -26,6 +27,7 @@ var previous_state: GameState = GameState.TITLE
 var current_course_id: String = ""
 var race_results: Array = []
 var player_stats: Dictionary = {}
+var editor_course_data: CourseData = null
 
 var session_stats: Dictionary = {
 	"races_completed": 0,
@@ -139,6 +141,11 @@ func restart_race():
 func quit_to_menu():
 	get_tree().change_scene_to_file("res://scenes/title.tscn")
 	change_state(GameState.TITLE)
+
+func open_editor(course_data: CourseData = null) -> void:
+	editor_course_data = course_data
+	get_tree().change_scene_to_file("res://scenes/course_editor.tscn")
+	change_state(GameState.EDITOR)
 
 func toggle_pause():
 	if state == GameState.RACING:

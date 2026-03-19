@@ -88,6 +88,9 @@ func _ready():
 	if is_player:
 		add_to_group("player")
 
+	# Prevent canvas culling — _draw() content must remain visible at any world position
+	RenderingServer.canvas_item_set_custom_rect(get_canvas_item(), true, Rect2(-10000, -10000, 20000, 20000))
+
 	course = get_tree().get_first_node_in_group("course")
 
 	# Hide placeholder sprites — visuals handled by _draw()
@@ -182,6 +185,15 @@ func _process_riding(delta):
 
 	var terrain_max: float = max_speed * terrain_props.max_speed_mult
 	var terrain_decel: float = terrain_props.get("deceleration", 30.0)
+
+	# Elevation effect: uphill slows, downhill boosts
+	var elev: int = _get_elevation()
+	if elev > 0:
+		terrain_max *= 0.75
+		accel_mult *= 0.6
+	elif elev < 0:
+		terrain_max *= 1.15
+		terrain_decel *= 0.3  # coasts longer downhill
 
 	if is_braking:
 		# Ramp from light to hard braking the longer the key is held
@@ -503,4 +515,9 @@ func _get_terrain_height() -> float:
 func _get_terrain_layer() -> int:
 	if course and course.has_method("get_layer_at"):
 		return course.get_layer_at(global_position)
+	return 0
+
+func _get_elevation() -> int:
+	if course and course.has_method("get_elevation_at"):
+		return course.get_elevation_at(global_position)
 	return 0

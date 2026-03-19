@@ -1,0 +1,121 @@
+[gd_scene load_steps=4 format=3 uid="uid://course_editor"]
+
+[ext_resource type="Script" path="res://src/editor/course_editor.gd" id="1"]
+[ext_resource type="Script" path="res://src/course_builder.gd" id="2"]
+[ext_resource type="Script" path="res://src/editor/editor_camera.gd" id="3"]
+
+[node name="CourseEditor" type="Node2D"]
+script = ExtResource("1")
+
+[node name="World" type="Node2D" parent="."]
+scale = Vector2(1, 0.6)
+
+[node name="Ground" type="Polygon2D" parent="World"]
+z_index = -4096
+color = Color(0.22, 0.42, 0.18, 1)
+polygon = PackedVector2Array(-5000, -5000, 10000, -5000, 10000, 10000, -5000, 10000)
+
+[node name="CourseBuilder" type="Node2D" parent="World"]
+script = ExtResource("2")
+
+[node name="EditorOverlay" type="Node2D" parent="World"]
+z_index = 100
+
+[node name="EditorCamera" type="Camera2D" parent="World"]
+position = Vector2(800, 600)
+script = ExtResource("3")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="TopBar" type="HBoxContainer" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 600.0
+offset_bottom = 46.0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="NewBtn" type="Button" parent="UI/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+text = "New"
+
+[node name="SaveBtn" type="Button" parent="UI/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+text = "Save"
+
+[node name="LoadBtn" type="Button" parent="UI/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+text = "Load"
+
+[node name="TestBtn" type="Button" parent="UI/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+text = "Test"
+
+[node name="UndoBtn" type="Button" parent="UI/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+text = "Undo"
+
+[node name="BackBtn" type="Button" parent="UI/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+text = "Back"
+
+[node name="ToolBar" type="VBoxContainer" parent="UI"]
+offset_left = 10.0
+offset_top = 56.0
+offset_right = 180.0
+offset_bottom = 300.0
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="ToolLabel" type="Label" parent="UI/ToolBar"]
+mouse_filter = 2
+text = "Select [1]"
+
+[node name="Sep" type="HSeparator" parent="UI/ToolBar"]
+mouse_filter = 2
+
+[node name="SelectBtn" type="Button" parent="UI/ToolBar"]
+text = "1: Select"
+
+[node name="AddBtn" type="Button" parent="UI/ToolBar"]
+text = "2: Add Point"
+
+[node name="InsertBtn" type="Button" parent="UI/ToolBar"]
+text = "3: Insert Point"
+
+[node name="MudBtn" type="Button" parent="UI/ToolBar"]
+text = "4: Mud Zone"
+
+[node name="SandBtn" type="Button" parent="UI/ToolBar"]
+text = "5: Sand Zone"
+
+[node name="BarrierBtn" type="Button" parent="UI/ToolBar"]
+text = "6: Barrier"
+
+[node name="DeleteBtn" type="Button" parent="UI/ToolBar"]
+text = "7: Delete"
+
+[node name="StatusBar" type="Label" parent="UI"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -30.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+text = "0 pts | 0 mud | 0 sand | 0 barriers"
+
+[connection signal="pressed" from="UI/TopBar/NewBtn" to="." method="_on_new_pressed"]
+[connection signal="pressed" from="UI/TopBar/SaveBtn" to="." method="_on_save_pressed"]
+[connection signal="pressed" from="UI/TopBar/LoadBtn" to="." method="_on_load_pressed"]
+[connection signal="pressed" from="UI/TopBar/TestBtn" to="." method="_on_test_pressed"]
+[connection signal="pressed" from="UI/TopBar/UndoBtn" to="." method="_undo"]
+[connection signal="pressed" from="UI/TopBar/BackBtn" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="UI/ToolBar/SelectBtn" to="." method="_set_tool" binds= [0]]
+[connection signal="pressed" from="UI/ToolBar/AddBtn" to="." method="_set_tool" binds= [1]]
+[connection signal="pressed" from="UI/ToolBar/InsertBtn" to="." method="_set_tool" binds= [2]]
+[connection signal="pressed" from="UI/ToolBar/MudBtn" to="." method="_set_tool" binds= [3]]
+[connection signal="pressed" from="UI/ToolBar/SandBtn" to="." method="_set_tool" binds= [4]]
+[connection signal="pressed" from="UI/ToolBar/BarrierBtn" to="." method="_set_tool" binds= [5]]
+[connection signal="pressed" from="UI/ToolBar/DeleteBtn" to="." method="_set_tool" binds= [6]]

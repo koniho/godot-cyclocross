@@ -42,6 +42,10 @@ layout_mode = 2
 layout_mode = 2
 text = "START RACE"
 
+[node name="EditorButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+text = "COURSE EDITOR"
+
 [node name="QuitButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
 text = "QUIT"
