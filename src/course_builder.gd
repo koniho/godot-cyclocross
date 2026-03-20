@@ -24,7 +24,7 @@ const TAPE_POLE_SPACING := 68.0
 const TAPE_POLE_HEIGHT  := 26.0
 const TAPE_WIDTH        := 2.5
 const TAPE_POLE_WIDTH   := 3.5
-const TAPE_ANIM_RADIUS  := 220.0
+const TAPE_ANIM_RADIUS  := 120.0
 const C_TAPE := Color(1.0, 0.88, 0.05)
 const C_POLE := Color(0.18, 0.18, 0.20)
 
@@ -366,18 +366,24 @@ func _animate_tape_segment(seg: Dictionary, strength: float) -> void:
 
 	var tw := create_tween()
 	seg.tween = tw
-	var droop := mid_rest + Vector2(0.0, 28.0 * strength)
-
+	# Gentle tape droop
+	var droop := mid_rest + Vector2(0.0, 12.0 * strength)
 	tw.tween_method(func(p: Vector2): tape.set_point_position(1, p),
-		mid_rest, droop, 0.10)
+		mid_rest, droop, 0.12)
 	tw.tween_method(func(p: Vector2): tape.set_point_position(1, p),
-		droop, mid_rest, 0.45)
+		droop, mid_rest, 0.50)
 
+	# Tilt poles by moving the top point (point 1) while base (point 0) stays fixed
 	for pole: Line2D in seg.poles:
-		var tilt := randf_range(-0.25, 0.25) * strength
+		var base: Vector2 = pole.get_point_position(0)
+		var top_rest: Vector2 = pole.get_point_position(1)
+		var tilt_px := randf_range(-6.0, 6.0) * strength
+		var top_tilted := top_rest + Vector2(tilt_px, 0.0)
 		var ptw := create_tween()
-		ptw.tween_property(pole, "rotation", tilt, 0.08)
-		ptw.tween_property(pole, "rotation", 0.0,  0.40)
+		ptw.tween_method(func(p: Vector2): pole.set_point_position(1, p),
+			top_rest, top_tilted, 0.10)
+		ptw.tween_method(func(p: Vector2): pole.set_point_position(1, p),
+			top_tilted, top_rest, 0.45)
 
 # ── Bridge ────────────────────────────────────────────────────────────────────
 
