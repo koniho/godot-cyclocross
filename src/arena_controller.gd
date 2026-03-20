@@ -47,6 +47,10 @@ func _ready():
 
 	bell_label.visible = false
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_Q:
+		GameManager.quit_to_menu()
+
 func _process(delta: float):
 	if not player or race_finished:
 		return
