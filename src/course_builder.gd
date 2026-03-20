@@ -502,32 +502,33 @@ func _add_barrier(center: Vector2, track_dir: Vector2, vis_offset: Vector2 = Vec
 	barrier.set_script(BarrierScript)
 	barrier.collision_layer = 16
 	barrier.collision_mask  = 1
-	# Position at visual height; collision shape offset back to ground level
-	barrier.position = center + vis_offset
+	# Position at ground level for correct collision and distance checks
+	barrier.position = center
 	barrier.rotation = atan2(track_dir.y, track_dir.x)
 
-	# Rotate vis_offset into barrier's local space and negate for collision
-	var col_offset := -vis_offset.rotated(-barrier.rotation)
 	var col := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
 	rect.size = Vector2(HALF_TRACK * 2.2, 80.0)
 	col.shape = rect
-	col.position = col_offset
 	barrier.add_child(col)
+
+	# Visual elements offset to match terrain height
+	# Rotate vis_offset into barrier's local space for child positioning
+	var local_off := vis_offset.rotated(-barrier.rotation)
 
 	var bar := Line2D.new()
 	bar.width = 6.0
 	bar.default_color = Color.WHITE
-	bar.add_point(Vector2(0.0, -HALF_TRACK * 1.05))
-	bar.add_point(Vector2(0.0,  HALF_TRACK * 1.05))
+	bar.add_point(Vector2(0.0, -HALF_TRACK * 1.05) + local_off)
+	bar.add_point(Vector2(0.0,  HALF_TRACK * 1.05) + local_off)
 	barrier.add_child(bar)
 
 	for sign_y in [-1.0, 1.0]:
 		var cap := Line2D.new()
 		cap.width = 8.0
 		cap.default_color = C_RED
-		cap.add_point(Vector2(-6.0, sign_y * HALF_TRACK * 0.9))
-		cap.add_point(Vector2( 6.0, sign_y * HALF_TRACK * 0.9))
+		cap.add_point(Vector2(-6.0, sign_y * HALF_TRACK * 0.9) + local_off)
+		cap.add_point(Vector2( 6.0, sign_y * HALF_TRACK * 0.9) + local_off)
 		barrier.add_child(cap)
 
 	add_child(barrier)

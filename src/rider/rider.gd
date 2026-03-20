@@ -79,6 +79,7 @@ var _wheel_angle: float = 0.0   # visual rotation accumulator (radians)
 var _slope: float = 0.0         # current terrain slope (positive = uphill)
 var _wobble_timer: float = 0.0  # seconds remaining of steering wobble
 var _stumble_flash: float = 0.0 # seconds remaining of red flash
+var _stumble_cooldown: float = 0.0 # prevents re-triggering stumble every frame
 
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var bike_sprite: Sprite2D = $BikeSprite
@@ -116,6 +117,8 @@ func _ready():
 func _process(delta: float) -> void:
 	if _stumble_flash > 0.0:
 		_stumble_flash -= delta
+	if _stumble_cooldown > 0.0:
+		_stumble_cooldown -= delta
 	queue_redraw()
 
 func _physics_process(delta):
@@ -244,6 +247,12 @@ func _process_riding(delta):
 		_wobble_timer -= delta
 		steering_rate += randf_range(-3.0, 3.0) * delta * (_wobble_timer / 0.8)
 
+	# Terrain wobble: low-grip surfaces cause continuous steering instability
+	# Stronger at higher speeds, proportional to how slippery the surface is
+	if grip < 0.8 and current_speed > 30.0:
+		var wobble_strength := (1.0 - grip) * (current_speed / max_speed) * 4.0
+		steering_rate += randf_range(-wobble_strength, wobble_strength) * delta
+
 	velocity = forward * current_speed + lateral_velocity * (grip * drift_factor)
 
 func _process_jumping(_delta):
@@ -304,9 +313,9 @@ func _update_elevation(delta):
 	collision_mask = (1 << current_layer) | 4
 
 func _check_course_bounds() -> void:
-	if state != State.RIDING and state != State.JUMPING:
+	if state == State.CRASHED:
 		return
-	# Exempt when elevated above ground (bridge/jump) — not just absolute height
+	# Exempt when elevated above ground (bridge/jump)
 	var terrain_h := _get_terrain_height()
 	if height - terrain_h > BRIDGE_EXEMPT_HEIGHT:
 		return
@@ -318,7 +327,27 @@ func _check_course_bounds() -> void:
 	if not course.is_on_course(front_g) or not course.is_on_course(rear_g):
 		if course.has_method("animate_tape_at"):
 			course.animate_tape_at(course.to_local(global_position))
+		# Push player back onto the course + stumble penalty
+		_push_back_on_course()
 		_crash_off_course()
+
+func _push_back_on_course() -> void:
+	# Find nearest track point and nudge player toward it
+	if not course or not course.has_method("get_track_points"):
+		return
+	var pts: PackedVector2Array = course.get_track_points()
+	var lp := course.to_local(global_position)
+	var best_d := INF
+	var best_pt := lp
+	for p in pts:
+		var d := lp.distance_to(p)
+		if d < best_d:
+			best_d = d
+			best_pt = p
+	# Move toward the nearest track point (in global space)
+	var target_g := course.to_global(best_pt)
+	var nudge := (target_g - global_position).normalized() * 20.0
+	global_position += nudge
 
 func _land():
 	state = _jump_from_state  # return to riding or dismounted depending on jump origin
@@ -525,9 +554,12 @@ func _finish_mount():
 ## speed_mult: how much speed to keep (0.5 = lose half)
 ## wobble_time: seconds of steering instability
 func _stumble(speed_mult: float, wobble_time: float) -> void:
+	if _stumble_cooldown > 0.0:
+		return
 	current_speed *= speed_mult
 	_wobble_timer = maxf(_wobble_timer, wobble_time)
 	_stumble_flash = 0.5
+	_stumble_cooldown = 1.0   # can't re-stumble for 1 second
 	stamina = maxf(stamina - max_stamina * 0.15, 0.0)
 	stamina_changed.emit(stamina)
 	AudioManager.play("crash")
