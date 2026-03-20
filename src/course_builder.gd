@@ -200,23 +200,23 @@ func _build_visuals() -> void:
 	add_child(infield)
 
 	for zone in _mud_zones:
-		var zh := get_ground_height_at(zone.center as Vector2)
-		_add_terrain_oval(zone.center, zone.half, C_MUD, zh)
+		_add_terrain_oval(zone.center, zone.half, C_MUD)
 	for zone in _sand_zones:
-		var zh := get_ground_height_at(zone.center as Vector2)
-		_add_terrain_oval(zone.center, zone.half, C_SAND, zh)
+		_add_terrain_oval(zone.center, zone.half, C_SAND)
 
 	if _bridge.size() > 0:
 		_build_bridge_visual()
 
 	_add_start_finish()
 
-func _add_terrain_oval(center: Vector2, half: Vector2, col: Color, h: float = 0.0) -> void:
-	var off := _height_visual_offset(h)
+func _add_terrain_oval(center: Vector2, half: Vector2, col: Color) -> void:
+	# Each vertex gets its own height offset based on ground height at that position
 	var pts := PackedVector2Array()
 	for i in 24:
 		var a := float(i) / 24.0 * TAU
-		pts.append(center + Vector2(cos(a) * half.x, sin(a) * half.y) + off)
+		var local_pt := center + Vector2(cos(a) * half.x, sin(a) * half.y)
+		var h := get_ground_height_at(local_pt)
+		pts.append(local_pt + _height_visual_offset(h))
 	var poly := Polygon2D.new()
 	poly.color = col
 	poly.z_index = -3999

@@ -354,15 +354,18 @@ func _draw() -> void:
 	if shadow:
 		shadow.visible = false
 
-	# Draw shadow at ground level (no lift), oriented along heading with pitch skew
-	var sh_alpha := 0.3 - clampf(height / 80.0, 0.0, 1.0) * 0.2
+	# Draw shadow on the visual ground surface, oriented along heading with pitch
+	# Ground height = height from terrain (excludes jump/bridge arch above ground)
+	var ground_h := _get_terrain_height_only()
+	var ground_lift := Vector2(0.0, -ground_h * 3.0)  # visual ground position
+	var air_gap := height - ground_h                    # how far above ground (jump/bridge)
+	var sh_alpha := 0.3 - clampf(air_gap / 60.0, 0.0, 1.0) * 0.2
 	if sh_alpha > 0.01:
 		var sh_col := Color(0.0, 0.0, 0.0, sh_alpha)
-		var sh_spread := 1.0 + height / 40.0   # shadow grows when airborne
-		var sh_rear  := -fwd * 14.0 * sh_spread + Vector2(0.0, pitch_px * 0.3)
-		var sh_front :=  fwd * 14.0 * sh_spread + Vector2(0.0, -pitch_px * 0.3)
+		var sh_spread := 1.0 + air_gap / 40.0   # shadow grows when airborne
+		var sh_rear  := ground_lift - fwd * 14.0 * sh_spread + Vector2(0.0, pitch_px * 0.3)
+		var sh_front := ground_lift + fwd * 14.0 * sh_spread + Vector2(0.0, -pitch_px * 0.3)
 		var sh_side  := side * 5.0 * sh_spread
-		# Flattened ellipse-like quad on the ground
 		draw_polygon(
 			PackedVector2Array([
 				sh_front + sh_side, sh_front - sh_side,
@@ -562,4 +565,10 @@ func _get_height_at_pos(pos: Vector2) -> float:
 func _get_camber() -> float:
 	if course and course.has_method("get_camber_at"):
 		return course.get_camber_at(global_position)
+	return 0.0
+
+func _get_terrain_height_only() -> float:
+	# Ground height only (no bridge arch, no jump) — for shadow placement
+	if course and course.has_method("get_ground_height_at"):
+		return course.get_ground_height_at(course.to_local(global_position))
 	return 0.0
