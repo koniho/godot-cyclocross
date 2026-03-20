@@ -324,10 +324,37 @@ func _check_course_bounds() -> void:
 	var fwd := Vector2.RIGHT.rotated(heading)
 	var front_g := to_global( fwd * WHEEL_OFFSET)
 	var rear_g  := to_global(-fwd * WHEEL_OFFSET)
-	if not course.is_on_course(front_g) or not course.is_on_course(rear_g):
-		if course.has_method("animate_tape_at"):
-			course.animate_tape_at(course.to_local(global_position))
-		_crash_off_course()
+	var front_off := not course.is_on_course(front_g)
+	var rear_off  := not course.is_on_course(rear_g)
+	if not front_off and not rear_off:
+		return
+
+	# Animate tape at collision point
+	if course.has_method("animate_tape_at"):
+		course.animate_tape_at(course.to_local(global_position))
+
+	# Find inward direction: from player toward nearest track centerline point
+	var pts: PackedVector2Array = course.get_track_points()
+	var lp := course.to_local(global_position)
+	var best_d := INF
+	var best_pt := lp
+	for p in pts:
+		var d := lp.distance_to(p)
+		if d < best_d:
+			best_d = d
+			best_pt = p
+	var inward := (course.to_global(best_pt) - global_position).normalized()
+
+	# Gentle heading correction: blend current heading toward inward by ~15%
+	var inward_angle := inward.angle()
+	var angle_diff := angle_difference(heading, inward_angle)
+	heading += angle_diff * 0.15
+
+	# Push velocity inward and prevent further outward movement
+	velocity = Vector2.RIGHT.rotated(heading) * current_speed
+
+	# Stumble penalty (with cooldown)
+	_crash_off_course()
 
 func _land():
 	state = _jump_from_state  # return to riding or dismounted depending on jump origin
