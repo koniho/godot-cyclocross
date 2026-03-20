@@ -327,12 +327,12 @@ func _check_course_bounds() -> void:
 	if not course.is_on_course(front_g) or not course.is_on_course(rear_g):
 		if course.has_method("animate_tape_at"):
 			course.animate_tape_at(course.to_local(global_position))
-		# Push player back onto the course + stumble penalty
-		_push_back_on_course()
+		# Deflect velocity back onto course + stumble penalty
+		_deflect_onto_course()
 		_crash_off_course()
 
-func _push_back_on_course() -> void:
-	# Gently nudge player toward nearest track point (small step per frame, not a teleport)
+func _deflect_onto_course() -> void:
+	# Redirect velocity toward nearest track point instead of nudging position
 	if not course or not course.has_method("get_track_points"):
 		return
 	var pts: PackedVector2Array = course.get_track_points()
@@ -344,9 +344,11 @@ func _push_back_on_course() -> void:
 		if d < best_d:
 			best_d = d
 			best_pt = p
+	# Steer heading toward the nearest track point
 	var target_g := course.to_global(best_pt)
-	var nudge := (target_g - global_position).normalized() * 5.0
-	global_position += nudge
+	var to_track := (target_g - global_position).normalized()
+	heading = to_track.angle()
+	velocity = to_track * current_speed
 
 func _land():
 	state = _jump_from_state  # return to riding or dismounted depending on jump origin
