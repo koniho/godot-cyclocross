@@ -10,7 +10,7 @@ signal barrier_result(result: String)
 
 @export_group("Movement")
 @export var max_speed: float = 420.0       # pavement top speed px/s (~47 km/h)
-@export var acceleration: float = 50.0    # px/s²
+@export var acceleration: float = 75.0    # px/s²
 @export var drift_factor: float = 0.9
 
 @export_group("Steering")
@@ -77,6 +77,8 @@ var _wheel_front: CollisionShape2D = null
 var _wheel_rear:  CollisionShape2D = null
 var _wheel_angle: float = 0.0   # visual rotation accumulator (radians)
 var _slope: float = 0.0         # current terrain slope (positive = uphill)
+var _wobble_timer: float = 0.0  # seconds remaining of steering wobble
+var _stumble_flash: float = 0.0 # seconds remaining of red flash
 
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var bike_sprite: Sprite2D = $BikeSprite
@@ -111,7 +113,9 @@ func _ready():
 		else:
 			_wheel_rear = col
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _stumble_flash > 0.0:
+		_stumble_flash -= delta
 	queue_redraw()
 
 func _physics_process(delta):
@@ -228,14 +232,17 @@ func _process_riding(delta):
 	var forward := Vector2.RIGHT.rotated(heading)
 	var lateral_velocity := velocity - forward * velocity.dot(forward)
 
-	# Slide-out check: centripetal acceleration v*ω — too tight at speed → crash.
-	# This happens when e.g. braking into a corner built up turn rate, then re-accelerating.
+	# Slide-out check: centripetal acceleration v*ω — too tight at speed → stumble.
 	var centripetal := current_speed * absf(steering_rate)
 	if centripetal > slide_threshold * grip:
-		current_speed *= 0.35
-		steering_rate = 0.0
-		_crash()
+		_stumble(0.5, 0.8)
+		steering_rate *= 0.3
 		return
+
+	# Apply wobble from recent stumble
+	if _wobble_timer > 0.0:
+		_wobble_timer -= delta
+		steering_rate += randf_range(-3.0, 3.0) * delta * (_wobble_timer / 0.8)
 
 	velocity = forward * current_speed + lateral_velocity * (grip * drift_factor)
 
@@ -376,10 +383,15 @@ func _draw() -> void:
 			PackedColorArray([sh_col, sh_col, sh_col, sh_col])
 		)
 
+	# Stumble flash: tint red briefly on hit
+	var flash := _stumble_flash > 0.0 and fmod(_stumble_flash, 0.15) < 0.075
+	var rider_col := Color(1.0, 0.3, 0.3) if flash else Color(0.25, 0.55, 0.90)
+	var frame_col := Color(0.9, 0.3, 0.2) if flash else Color(0.55, 0.42, 0.22)
+
 	match state:
 		State.RIDING, State.MOUNTING, State.DISMOUNTING:
-			_draw_bike(fwd, side, lift, Color(0.55, 0.42, 0.22), Color(0.2, 0.2, 0.22), pitch_px)
-			_draw_rider_body(fwd * 3.0 + lift + Vector2(0.0, -pitch_px * 0.3), Color(0.25, 0.55, 0.90))
+			_draw_bike(fwd, side, lift, frame_col, Color(0.2, 0.2, 0.22), pitch_px)
+			_draw_rider_body(fwd * 3.0 + lift + Vector2(0.0, -pitch_px * 0.3), rider_col)
 
 		State.JUMPING:
 			_draw_bike(fwd, side, lift, Color(0.70, 0.60, 0.18), Color(0.25, 0.25, 0.25), 0.0)
@@ -509,41 +521,30 @@ func _finish_mount():
 		state = State.RIDING
 		state_changed.emit(state)
 
-func _crash():
-	state = State.CRASHED
-	state_changed.emit(state)
-	current_speed *= 0.3
+## Stumble: speed penalty + wobble + stamina drain. No state change — keeps riding.
+## speed_mult: how much speed to keep (0.5 = lose half)
+## wobble_time: seconds of steering instability
+func _stumble(speed_mult: float, wobble_time: float) -> void:
+	current_speed *= speed_mult
+	_wobble_timer = maxf(_wobble_timer, wobble_time)
+	_stumble_flash = 0.5
+	stamina = maxf(stamina - max_stamina * 0.15, 0.0)
+	stamina_changed.emit(stamina)
 	AudioManager.play("crash")
-	get_tree().create_timer(2.0).timeout.connect(_recover_from_crash)
+
+func _crash():
+	# Slide-out / general crash → stumble with moderate penalty
+	_stumble(0.5, 0.8)
 
 func crash_into_tape() -> void:
-	# Hitting course tape: brief crash then recover dismounted
+	# Tape collision: light stumble — speed cut + brief wobble
 	if state == State.CRASHED or state == State.DISMOUNTED:
 		return
-	state = State.CRASHED
-	state_changed.emit(state)
-	current_speed *= 0.15
-	AudioManager.play("crash")
-	get_tree().create_timer(1.5).timeout.connect(func():
-		if state == State.CRASHED:
-			state = State.DISMOUNTED
-			state_changed.emit(state))
+	_stumble(0.7, 0.5)
 
 func _crash_off_course():
-	# Going off-course: crash and recover dismounted (like real cyclocross)
-	state = State.CRASHED
-	state_changed.emit(state)
-	current_speed *= 0.2
-	AudioManager.play("crash")
-	get_tree().create_timer(2.0).timeout.connect(func():
-		if state == State.CRASHED:
-			state = State.DISMOUNTED
-			state_changed.emit(state))
-
-func _recover_from_crash():
-	if state == State.CRASHED:
-		state = State.RIDING
-		state_changed.emit(state)
+	# Off-course: heavier stumble
+	_stumble(0.4, 1.0)
 
 func _get_terrain_properties() -> Dictionary:
 	if course and course.has_method("get_terrain_at"):

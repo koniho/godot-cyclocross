@@ -19,14 +19,14 @@ const PROPERTIES = {
 	Type.GRASS: {
 		"name": "Grass",
 		"max_speed_mult": 0.76,   # ~320 px/s (36 km/h)
-		"deceleration": 30.0,     # coasts to stop in ~11s from full speed
+		"deceleration": 15.0,     # coasts to stop in ~21s from full speed
 		"grip": 0.9,
 		"color": Color(0.3, 0.5, 0.2)
 	},
 	Type.PAVEMENT: {
 		"name": "Pavement",
 		"max_speed_mult": 1.0,    # 420 px/s (47 km/h)
-		"deceleration": 10.0,     # barely rolls out
+		"deceleration": 6.0,      # coasts very efficiently
 		"grip": 1.0,
 		"color": Color(0.4, 0.4, 0.4)
 	},
