@@ -299,7 +299,9 @@ func _update_elevation(delta):
 func _check_course_bounds() -> void:
 	if state != State.RIDING and state != State.JUMPING:
 		return
-	if height > BRIDGE_EXEMPT_HEIGHT:
+	# Exempt when elevated above ground (bridge/jump) — not just absolute height
+	var terrain_h := _get_terrain_height()
+	if height - terrain_h > BRIDGE_EXEMPT_HEIGHT:
 		return
 	if not course or not course.has_method("is_on_course"):
 		return
@@ -456,7 +458,9 @@ func _squash_sprite():
 func attempt_bunny_hop():
 	if state != State.RIDING and state != State.DISMOUNTED:
 		return
-	if height > 5.0:
+	# Only allow hop if close to the ground (not already airborne)
+	var terrain_h := _get_terrain_height()
+	if height - terrain_h > 5.0:
 		return
 
 	if approaching_barrier and approaching_barrier.has_method("attempt_hop"):
