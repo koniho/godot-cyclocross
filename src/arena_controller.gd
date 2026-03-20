@@ -15,6 +15,8 @@ const DISMOUNT_BENEFICIAL_TERRAINS := [TerrainTypes.Type.SAND, TerrainTypes.Type
 @onready var lap_label: Label         = $"../HUD/Control/LapLabel"
 @onready var timer_label: Label       = $"../HUD/Control/TimerLabel"
 @onready var bell_label: Label        = $"../HUD/Control/BellLabel"
+@onready var lap_banner: Label        = $"../HUD/Control/LapBanner"
+@onready var lap_time_label: Label    = $"../HUD/Control/LapTimeLabel"
 
 var player: Node2D = null
 var course: Node2D = null
@@ -24,6 +26,9 @@ var lap_count: int = 0
 var bell_lap_active: bool = false
 var race_finished: bool = false
 var _bell_flash_timer: float = 0.0
+var _lap_start_time: float = 0.0
+var _lap_times: Array = []
+var _banner_timer: float = 0.0
 
 func _ready():
 	player = get_tree().get_first_node_in_group("player")
@@ -81,24 +86,47 @@ func _process(delta: float):
 	var on_slow_terrain: bool = player.current_terrain in DISMOUNT_BENEFICIAL_TERRAINS
 	dismount_hint.visible = (on_slow_terrain and player.state == player.State.RIDING)
 
+	# Lap banner fade-out
+	if _banner_timer > 0.0:
+		_banner_timer -= delta
+		if _banner_timer <= 0.0:
+			lap_banner.visible = false
+			lap_time_label.visible = false
+		else:
+			var alpha := clampf(_banner_timer / 0.5, 0.0, 1.0)
+			lap_banner.modulate.a = alpha
+			lap_time_label.modulate.a = alpha
+
 	# Bell label flash
 	if bell_lap_active and not race_finished:
 		_bell_flash_timer += delta
 		bell_label.visible = fmod(_bell_flash_timer, 0.6) < 0.35
 
+func _format_time(t: float) -> String:
+	var mins: int = floori(t / 60.0)
+	var secs: float = t - mins * 60.0
+	return "%d:%05.2f" % [mins, secs]
+
 func _on_lap_crossed(_rider: Node2D) -> void:
 	if race_finished:
 		return
 
+	# Record lap time
+	var lap_time := elapsed_time - _lap_start_time
+	_lap_times.append(lap_time)
+	_lap_start_time = elapsed_time
+
 	if bell_lap_active:
 		# Completing the bell lap — race over
 		race_finished = true
-		bell_label.text = "FINISHED!  Laps: %d" % lap_count
+		bell_label.text = "FINISHED!  Laps: %d" % (lap_count + 1)
 		bell_label.modulate = Color(0.2, 1.0, 0.4)
 		bell_label.visible = true
+		_show_lap_banner(lap_count + 1, lap_time)
 		return
 
 	lap_count += 1
+	_show_lap_banner(lap_count, lap_time)
 
 	if elapsed_time >= RACE_DURATION:
 		# This crossing triggers the bell lap
@@ -108,3 +136,28 @@ func _on_lap_crossed(_rider: Node2D) -> void:
 		bell_label.visible = true
 		_bell_flash_timer = 0.0
 		AudioManager.play("bell")
+
+func _show_lap_banner(lap_num: int, lap_time: float) -> void:
+	lap_banner.text = "LAP %d" % lap_num
+	lap_banner.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	lap_banner.visible = true
+
+	var time_text := _format_time(lap_time)
+	if _lap_times.size() >= 2:
+		var prev_time: float = _lap_times[-2]
+		var diff := lap_time - prev_time
+		var diff_str := _format_time(absf(diff))
+		if diff < -0.01:
+			time_text += "  -%s" % diff_str
+			lap_time_label.modulate = Color(0.3, 1.0, 0.4)
+		elif diff > 0.01:
+			time_text += "  +%s" % diff_str
+			lap_time_label.modulate = Color(1.0, 0.4, 0.3)
+		else:
+			lap_time_label.modulate = Color(1.0, 1.0, 1.0)
+	else:
+		lap_time_label.modulate = Color(1.0, 1.0, 1.0)
+
+	lap_time_label.text = time_text
+	lap_time_label.visible = true
+	_banner_timer = 3.0  # visible for 3s, fades out in last 0.5s

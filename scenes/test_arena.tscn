@@ -138,6 +138,38 @@ text = "BELL LAP!"
 horizontal_alignment = 1
 visible = false
 
+[node name="LapBanner" type="Label" parent="HUD/Control"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -80.0
+offset_right = 200.0
+offset_bottom = -20.0
+theme_override_font_sizes/font_size = 56
+text = ""
+horizontal_alignment = 1
+visible = false
+
+[node name="LapTimeLabel" type="Label" parent="HUD/Control"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -15.0
+offset_right = 200.0
+offset_bottom = 25.0
+theme_override_font_sizes/font_size = 24
+text = ""
+horizontal_alignment = 1
+visible = false
+
 [node name="HopPrompt" type="Label" parent="HUD/Control"]
 layout_mode = 1
 anchors_preset = 8
