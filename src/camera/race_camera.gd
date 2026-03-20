@@ -3,9 +3,9 @@ class_name RaceCamera
 extends Camera2D
 
 @export var target: Node2D
-@export var smooth_speed: float = 5.0
-@export var look_ahead_distance: float = 120.0
-@export var look_ahead_smoothing: float = 3.0
+@export var smooth_speed: float = 3.5
+@export var look_ahead_distance: float = 80.0
+@export var look_ahead_smoothing: float = 1.5
 @export var zoom_min: Vector2 = Vector2(0.7, 0.7)
 @export var zoom_max: Vector2 = Vector2(1.0, 1.0)
 @export var zoom_speed: float = 2.0

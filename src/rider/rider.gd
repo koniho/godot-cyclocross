@@ -332,7 +332,7 @@ func _check_course_bounds() -> void:
 		_crash_off_course()
 
 func _push_back_on_course() -> void:
-	# Find nearest track point and nudge player toward it
+	# Gently nudge player toward nearest track point (small step per frame, not a teleport)
 	if not course or not course.has_method("get_track_points"):
 		return
 	var pts: PackedVector2Array = course.get_track_points()
@@ -344,9 +344,8 @@ func _push_back_on_course() -> void:
 		if d < best_d:
 			best_d = d
 			best_pt = p
-	# Move toward the nearest track point (in global space)
 	var target_g := course.to_global(best_pt)
-	var nudge := (target_g - global_position).normalized() * 20.0
+	var nudge := (target_g - global_position).normalized() * 5.0
 	global_position += nudge
 
 func _land():
