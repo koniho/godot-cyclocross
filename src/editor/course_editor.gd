@@ -84,6 +84,10 @@ func _handle_key(event: InputEventKey) -> void:
 				_adjust_width(10.0)
 		KEY_C:
 			_cycle_camber()
+		KEY_PAGEUP:
+			_adjust_all_heights(5.0)
+		KEY_PAGEDOWN:
+			_adjust_all_heights(-5.0)
 
 func _handle_click(_event: InputEventMouseButton, pos: Vector2) -> void:
 	match current_tool:
@@ -309,6 +313,17 @@ func _adjust_height(delta_h: float) -> void:
 		return
 	var h: float = course_data.track_heights[_selected_pt] + delta_h
 	course_data.track_heights[_selected_pt] = clampf(h, 0.0, 120.0)
+	_push_undo()
+	course_builder.rebuild()
+	_update_status()
+
+func _adjust_all_heights(delta_h: float) -> void:
+	var n := course_data.track_heights.size()
+	if n == 0:
+		return
+	for i in n:
+		var h: float = course_data.track_heights[i] + delta_h
+		course_data.track_heights[i] = clampf(h, 0.0, 120.0)
 	_push_undo()
 	course_builder.rebuild()
 	_update_status()

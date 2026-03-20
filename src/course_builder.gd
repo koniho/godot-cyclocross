@@ -200,20 +200,23 @@ func _build_visuals() -> void:
 	add_child(infield)
 
 	for zone in _mud_zones:
-		_add_terrain_oval(zone.center, zone.half, C_MUD)
+		var zh := get_ground_height_at(zone.center as Vector2)
+		_add_terrain_oval(zone.center, zone.half, C_MUD, zh)
 	for zone in _sand_zones:
-		_add_terrain_oval(zone.center, zone.half, C_SAND)
+		var zh := get_ground_height_at(zone.center as Vector2)
+		_add_terrain_oval(zone.center, zone.half, C_SAND, zh)
 
 	if _bridge.size() > 0:
 		_build_bridge_visual()
 
 	_add_start_finish()
 
-func _add_terrain_oval(center: Vector2, half: Vector2, col: Color) -> void:
+func _add_terrain_oval(center: Vector2, half: Vector2, col: Color, h: float = 0.0) -> void:
+	var off := _height_visual_offset(h)
 	var pts := PackedVector2Array()
 	for i in 24:
 		var a := float(i) / 24.0 * TAU
-		pts.append(center + Vector2(cos(a) * half.x, sin(a) * half.y))
+		pts.append(center + Vector2(cos(a) * half.x, sin(a) * half.y) + off)
 	var poly := Polygon2D.new()
 	poly.color = col
 	poly.z_index = -3999
@@ -486,21 +489,30 @@ func _build_barriers() -> void:
 		var b: Vector2  = _track_pts[idx_b]
 		var mid: Vector2 = a.lerp(b, t)
 		var dir: Vector2 = (b - a).normalized()
-		_add_barrier(mid - dir * (BARRIER_PAIR_SPACING * 0.5), dir)
-		_add_barrier(mid + dir * (BARRIER_PAIR_SPACING * 0.5), dir)
+		# Interpolate ground height at each barrier position
+		var h_a := _get_height_at_index(idx_a)
+		var h_b := _get_height_at_index(idx_b)
+		var h_mid := lerpf(h_a, h_b, t)
+		var off := _height_visual_offset(h_mid)
+		_add_barrier(mid - dir * (BARRIER_PAIR_SPACING * 0.5), dir, off)
+		_add_barrier(mid + dir * (BARRIER_PAIR_SPACING * 0.5), dir, off)
 
-func _add_barrier(center: Vector2, track_dir: Vector2) -> void:
+func _add_barrier(center: Vector2, track_dir: Vector2, vis_offset: Vector2 = Vector2.ZERO) -> void:
 	var barrier := Area2D.new()
 	barrier.set_script(BarrierScript)
 	barrier.collision_layer = 16
 	barrier.collision_mask  = 1
-	barrier.position = center
+	# Position at visual height; collision shape offset back to ground level
+	barrier.position = center + vis_offset
 	barrier.rotation = atan2(track_dir.y, track_dir.x)
 
+	# Rotate vis_offset into barrier's local space and negate for collision
+	var col_offset := -vis_offset.rotated(-barrier.rotation)
 	var col := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
 	rect.size = Vector2(HALF_TRACK * 2.2, 80.0)
 	col.shape = rect
+	col.position = col_offset
 	barrier.add_child(col)
 
 	var bar := Line2D.new()
