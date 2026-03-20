@@ -21,10 +21,10 @@ signal barrier_result(result: String)
 @export var slide_threshold: float = 480.0 # v*ω (px/s²) before sliding out and crashing
 
 @export_group("Stamina")
-@export var max_stamina: float = 100.0
-@export var stamina_drain_rate: float = 3.0   # drains in ~33s of constant pedaling
-@export var stamina_regen_rate: float = 4.0   # refills in ~25s of coasting
-@export var bonk_threshold: float = 10.0      # below this = bonking (low accel)
+@export var max_stamina: float = 300.0
+@export var stamina_drain_rate: float = 3.0   # drains in ~100s of constant pedaling
+@export var stamina_regen_rate: float = 12.0  # refills in ~25s of coasting
+@export var bonk_threshold: float = 30.0      # below this = bonking (low accel)
 @export var bonk_accel_floor: float = 0.1     # minimum acceleration multiplier at 0 stamina
 
 @export_group("Bunny Hop")
