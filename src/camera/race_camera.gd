@@ -5,13 +5,14 @@ extends Camera2D
 @export var target: Node2D
 @export var smooth_speed: float = 3.5
 @export var look_ahead_distance: float = 80.0
-@export var look_ahead_smoothing: float = 1.5
+@export var look_ahead_smoothing: float = 1.0
 @export var zoom_min: Vector2 = Vector2(0.7, 0.7)
 @export var zoom_max: Vector2 = Vector2(1.0, 1.0)
-@export var zoom_speed: float = 2.0
+@export var zoom_speed: float = 1.5
 @export var shake_decay: float = 5.0
 
 var current_look_ahead: Vector2 = Vector2.ZERO
+var _smooth_velocity: Vector2 = Vector2.ZERO  # heavily smoothed velocity for look-ahead
 var shake_intensity: float = 0.0
 var shake_offset: Vector2 = Vector2.ZERO
 var target_zoom: Vector2 = Vector2.ONE
@@ -30,14 +31,16 @@ func _process(delta):
 	_update_shake(delta)
 
 func _update_position(delta):
-	var target_velocity = Vector2.ZERO
+	# Smooth velocity independently — prevents wobble/stumble from jerking the camera
+	var raw_velocity := Vector2.ZERO
 	if target.is_in_group("riders"):
-		target_velocity = target.velocity
+		raw_velocity = target.velocity
+	_smooth_velocity = _smooth_velocity.lerp(raw_velocity, 0.8 * delta)
 
-	var desired_look_ahead = target_velocity.normalized() * look_ahead_distance
+	var desired_look_ahead := _smooth_velocity.normalized() * look_ahead_distance
 	current_look_ahead = current_look_ahead.lerp(desired_look_ahead, look_ahead_smoothing * delta)
 
-	var target_pos = target.global_position + current_look_ahead
+	var target_pos := target.global_position + current_look_ahead
 	global_position = global_position.lerp(target_pos, smooth_speed * delta)
 	offset = shake_offset
 
@@ -45,8 +48,9 @@ func _update_zoom(delta):
 	if not target.is_in_group("riders"):
 		return
 
-	var speed_ratio = clampf(target.current_speed / target.max_speed, 0.0, 1.0)
+	var speed_ratio := clampf(target.current_speed / target.max_speed, 0.0, 1.0)
 	target_zoom = zoom_max.lerp(zoom_min, speed_ratio)
+	# Very slow zoom transitions — no pulsing on stumble speed changes
 	zoom = zoom.lerp(target_zoom, zoom_speed * delta)
 
 func _update_shake(delta):
